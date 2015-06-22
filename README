@@ -1,0 +1,9 @@
+RAMONA
+------
+Radiation monitoring and analysis software. 
+
+Contents:
+- Arduino client for Pocket Geiger ( http://www.radiation-watch.org/ )
+- MQTT client with PubSubClient ( https://github.com/knolleary/pubsubclient )
+- WiFi Client for arduino through UART ( WizFi210, 
+http://www.dfrobot.com/wiki/index.php/WiFi_Shield_V2.2_For_Arduino_(SKU:TEL0047) )
