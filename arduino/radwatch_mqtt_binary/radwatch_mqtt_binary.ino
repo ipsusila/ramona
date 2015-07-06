@@ -25,6 +25,7 @@ const int NCPM  = 30;         //cpm buffer count (2 minutes)
 const int NTEMP = 25;         //temp buffer count
 const int NHUM = 25;          //hum buffer count
 const int NPIR = 5;           //pir buffer count
+const int TOKEN = 0x0001;     //token to identify endian
 
 const double alphaCPM = 53.032;           //cpm = uSv x alpha (don't change this)
 const double alphaCPS = alphaCPM / 60;    //cps = (uSv x alpha) / 60
@@ -79,20 +80,11 @@ WizClientAuto wiz;
 PubSubClient mqClient(mqServer, mqPort, NULL, wiz);
 
 //send buffer
-char mqData[180];
+byte mqData[80];
 char mqBuf[20];
 
-const int SZ = 9;
-char bSec[SZ];
-char bCPS[SZ];
-char buSVs[SZ];
-char buSVse[SZ];
-char bCPM[SZ];
-char buSVm[SZ];
-char buSVme[SZ];
-char bPir[SZ];
-char bTemp[SZ];
-char bHum[SZ];
+//macro for storing data (d) of type (t) to buffer (p) as binary
+#define WRITEB(t, p, d)   ((*(t *)(p)) = d, p += sizeof(t))
 
 /**
  * Various initialisation.
@@ -204,7 +196,7 @@ void setup() {
   wiz.setup(115200, ssid, wpa);
   sprintf(mqBuf, "%s%d", cidStr, cid);
   if(mqClient.connect(mqBuf)) {
-    sprintf(mqBuf, "sensors/%d", cid);
+    sprintf(mqBuf, "bsensors/%d", cid);
     mqClient.publish(mqBuf, "{}");
   }
   else {
@@ -366,32 +358,28 @@ void sendResult() {
   if (sendTick >= nsend) {
     sendTick = 0;
 
-    dtostrf(second, -1, 2, bSec);
-    dtostrf(vCPS, -1, 2, bCPS);
-    dtostrf(uSvs, -1, 3, buSVs);
-    dtostrf(errSvs, -1, 3, buSVse);
-    dtostrf(vCPM, -1, 2, bCPM);
-    dtostrf(uSvm, -1, 3, buSVm);
-    dtostrf(errSvm, -1, 3, buSVme);
-    dtostrf(vPir, -1, 2, bPir);
-    dtostrf(vTemp, -1, 2, bTemp);
-    dtostrf(vHumidity, -1, 2, bHum);
-
-    //print JSON via MQTT
-    //Standard JSON format for radiation monitoring device
-    sprintf(mqData, 
-      "{\"cid\":%d,\"hh\":%ld,\"mm\":%d,\"ss\":%s,"
-      "\"cnt\":%d,\"cps\":%s,\"uss\":%s,\"es\":%s,"
-      "\"cpm\":%s,\"usm\":%s,\"em\":%s,\"pir\":%s,"
-      "\"temp\":%s,\"hum\":%s}\n"
-      ,cid, hour, (int)minute, bSec
-      ,radCnt, bCPS, buSVs, buSVse
-      ,bCPM, buSVm, buSVme, bPir
-      ,bTemp, bHum
-    );
-
+    byte * ptr = &mqData[1];
+    //token
+    const byte len = sizeof(byte) + 3*sizeof(int) + 2*sizeof(long) + 10 * sizeof(double);
+    mqData[0] = len - sizeof(byte);
+    WRITEB(int, ptr, TOKEN);
+    WRITEB(long, ptr, (long)cid);
+    WRITEB(long, ptr, hour);
+    WRITEB(unsigned int, ptr, minute);
+    WRITEB(double, ptr, second);
+    WRITEB(unsigned int, ptr, radCnt);
+    WRITEB(double, ptr, vCPS);
+    WRITEB(double, ptr, uSvs);
+    WRITEB(double, ptr, errSvs);
+    WRITEB(double, ptr, vCPM);
+    WRITEB(double, ptr, uSvm);
+    WRITEB(double, ptr, errSvm);
+    WRITEB(double, ptr, vPir);
+    WRITEB(double, ptr, vTemp);
+    WRITEB(double, ptr, vHumidity);
+    
     //mqtt publish
-    mqClient.publish(mqBuf, mqData);
+    mqClient.publish(mqBuf, mqData, len);
   }
 }
 
@@ -400,8 +388,8 @@ void loop() {
   if (!isReady)
     return;
     
-  mqClient.loop();  //loop mqtt
   if (cntReaded) {
+    mqClient.loop();  //loop mqtt
     cntReaded = 0;
     radCnt = signCount;
     nsCnt = noiseCount;
